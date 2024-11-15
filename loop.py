@@ -4,12 +4,14 @@ from JoyStick import JoyStick
 from Planet import Planet
 import random
 
-planets = [Planet(random.randint(-10000, 10000), random.randint(-10000, 10000), random.randint(1000, 10000), random.randint(100, 2000), (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))) for _ in range(10)]
+planets = [Planet(random.randint(-100000, 100000), random.randint(-100000, 100000), random.randint(1000, 10000), random.randint(100, 5000), (random.randint(50, 120), random.randint(50, 120), random.randint(50, 120))) for _ in range(150)]
 
 def main():
     pygame.init()
     SCREEN_WIDTH = 1200
     SCREEN_HEIGHT = 750
+    
+    map_on: bool = False
     
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
@@ -46,6 +48,15 @@ def main():
                 screen_y + planet.atmosphere_radius > 0 and 
                 screen_y - planet.atmosphere_radius < SCREEN_HEIGHT):
                 planet.draw(screen, world_offset_x, world_offset_y)
+                
+        ship.x = world_offset_x
+        ship.y = world_offset_y
+        ship.handle_collision(planets)
+        
+        total_gravity = pygame.Vector2(0, 0)
+        for planet in planets:
+            total_gravity += planet.get_gravity_force(world_offset_x, world_offset_y)
+        ship.velocity += total_gravity
             
                 
         if clicked:
@@ -54,16 +65,21 @@ def main():
             direction_vector = joystick.vector1
             ship.update(direction_vector, direction_vector.length())
             
-
-            world_offset_x -= ship.velocity.x 
-            world_offset_y -= ship.velocity.y 
-            trail_points.append((world_offset_x, world_offset_y))
+            if ship.velocity.length() > 1:
+                world_offset_x -= ship.velocity.x 
+                world_offset_y -= ship.velocity.y 
+                trail_points.append((world_offset_x, world_offset_y))
+            else:
+                pass
         else:
 
             ship.update(pygame.Vector2(0, 0), 0)
-            world_offset_x -= ship.velocity.x
-            world_offset_y -= ship.velocity.y
-            trail_points.append((world_offset_x, world_offset_y))
+            if ship.velocity.length() > 0.01:
+                world_offset_x -= ship.velocity.x 
+                world_offset_y -= ship.velocity.y 
+                trail_points.append((world_offset_x, world_offset_y))
+            else:
+                pass
                     
         
         # Rysowanie siatki
@@ -111,22 +127,32 @@ def main():
                 joystick.check()
             if event.type == pygame.MOUSEBUTTONUP:
                 clicked = False
+                
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_m:
+                    map_on = not map_on
+                    
             
-        # W głównej pętli while
-        draw_minimap(screen, planets, world_offset_x, world_offset_y, 
-             (ship.x, ship.y))
+        if map_on:
+            draw_minimap(screen, planets, world_offset_x, world_offset_y, 
+                (ship.x, ship.y), trail_points, 200)
+        
+        else:
+            draw_minimap(screen, planets, world_offset_x, world_offset_y, 
+                (ship.x, ship.y), trail_points, 500)
         
         pygame.display.flip()
         clock.tick(60)
     
     pygame.quit()
-    
-    
-def draw_minimap(screen, planets, world_offset_x, world_offset_y, ship_pos):
-    MAP_SIZE = 200
+ 
+
+
+def draw_minimap(screen, planets, world_offset_x, world_offset_y, ship_pos, trail_points, size):
+    MAP_SIZE = size
     MAP_X = 20
     MAP_Y = 20
-    MAP_SCALE = 0.01
+    MAP_SCALE = 0.008
     
     minimap_surface = pygame.Surface((MAP_SIZE, MAP_SIZE))
     minimap_surface.fill((20, 20, 20))
@@ -135,7 +161,25 @@ def draw_minimap(screen, planets, world_offset_x, world_offset_y, ship_pos):
     map_center_x = MAP_SIZE // 2
     map_center_y = MAP_SIZE // 2
     
-    # Poprawione obliczanie pozycji planet
+    # Rysowanie śladów na minimapie
+    if len(trail_points) > 1:
+        minimap_trail = []
+        for point in trail_points:
+            # Oblicz względną pozycję punktu śladu względem aktualnej pozycji statku
+            rel_x = (world_offset_x - point[0]) * MAP_SCALE
+            rel_y = (world_offset_y - point[1]) * MAP_SCALE
+            
+            # Przekształć na koordynaty minimapy
+            map_x = map_center_x + rel_x
+            map_y = map_center_y + rel_y
+            
+            if 0 <= map_x <= MAP_SIZE and 0 <= map_y <= MAP_SIZE:
+                minimap_trail.append((int(map_x), int(map_y)))
+        
+        if len(minimap_trail) > 1:
+            pygame.draw.lines(minimap_surface, (50, 50, 255), False, minimap_trail, 1)
+    
+    # Rysowanie planet
     for planet in planets:
         # Oblicz względną pozycję planety względem statku
         rel_x = (world_offset_x - planet.x) * MAP_SCALE
@@ -147,8 +191,17 @@ def draw_minimap(screen, planets, world_offset_x, world_offset_y, ship_pos):
         
         # Rysuj tylko jeśli planeta jest w granicach minimapy
         if (0 <= map_x <= MAP_SIZE and 0 <= map_y <= MAP_SIZE):
-            planet_size = max(2, min(8, planet.mass / 2000))
-            pygame.draw.circle(minimap_surface, (200, 200, 200), 
+            # Skalowanie rozmiaru planety na podstawie promienia
+            planet_size = planet.radius * MAP_SCALE
+            
+            # Użyj tego samego koloru co planeta, ale jaśniejszego
+            planet_color = (
+                min(255, planet.color[0] + 50),
+                min(255, planet.color[1] + 50),
+                min(255, planet.color[2] + 50)
+            )
+            
+            pygame.draw.circle(minimap_surface, planet_color, 
                              (int(map_x), int(map_y)), 
                              int(planet_size))
     
