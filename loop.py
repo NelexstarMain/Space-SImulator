@@ -1,6 +1,10 @@
 import pygame
 from SpaceShip import SpaceShip
 from JoyStick import JoyStick
+from Planet import Planet
+import random
+
+planets = [Planet(random.randint(-10000, 10000), random.randint(-10000, 10000), random.randint(1000, 10000), random.randint(100, 2000), (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))) for _ in range(10)]
 
 def main():
     pygame.init()
@@ -28,8 +32,22 @@ def main():
     
     running = True
     while running:
+        
         screen.fill((0, 0, 0))
         
+        
+        screen_rect = screen.get_rect()
+        for planet in planets:
+            screen_x = SCREEN_WIDTH//2 - (world_offset_x - planet.x)
+            screen_y = SCREEN_HEIGHT//2 - (world_offset_y - planet.y)
+            # Only draw if planet is visible
+            if (screen_x + planet.atmosphere_radius > 0 and 
+                screen_x - planet.atmosphere_radius < SCREEN_WIDTH and
+                screen_y + planet.atmosphere_radius > 0 and 
+                screen_y - planet.atmosphere_radius < SCREEN_HEIGHT):
+                planet.draw(screen, world_offset_x, world_offset_y)
+            
+                
         if clicked:
             joystick.check()
             joystick.draw(screen)
@@ -93,11 +111,55 @@ def main():
                 joystick.check()
             if event.type == pygame.MOUSEBUTTONUP:
                 clicked = False
+            
+        # W głównej pętli while
+        draw_minimap(screen, planets, world_offset_x, world_offset_y, 
+             (ship.x, ship.y))
         
         pygame.display.flip()
         clock.tick(60)
     
     pygame.quit()
-
+    
+    
+def draw_minimap(screen, planets, world_offset_x, world_offset_y, ship_pos):
+    MAP_SIZE = 200
+    MAP_X = 20
+    MAP_Y = 20
+    MAP_SCALE = 0.01
+    
+    minimap_surface = pygame.Surface((MAP_SIZE, MAP_SIZE))
+    minimap_surface.fill((20, 20, 20))
+    pygame.draw.rect(minimap_surface, (50, 50, 50), (0, 0, MAP_SIZE, MAP_SIZE), 1)
+    
+    map_center_x = MAP_SIZE // 2
+    map_center_y = MAP_SIZE // 2
+    
+    # Poprawione obliczanie pozycji planet
+    for planet in planets:
+        # Oblicz względną pozycję planety względem statku
+        rel_x = (world_offset_x - planet.x) * MAP_SCALE
+        rel_y = (world_offset_y - planet.y) * MAP_SCALE
+        
+        # Przekształć na koordynaty minimapy
+        map_x = map_center_x + rel_x
+        map_y = map_center_y + rel_y
+        
+        # Rysuj tylko jeśli planeta jest w granicach minimapy
+        if (0 <= map_x <= MAP_SIZE and 0 <= map_y <= MAP_SIZE):
+            planet_size = max(2, min(8, planet.mass / 2000))
+            pygame.draw.circle(minimap_surface, (200, 200, 200), 
+                             (int(map_x), int(map_y)), 
+                             int(planet_size))
+    
+    # Statek zawsze w środku
+    pygame.draw.circle(minimap_surface, (255, 0, 0), 
+                      (map_center_x, map_center_y), 3)
+    
+    pygame.draw.rect(minimap_surface, (100, 100, 100), 
+                    (0, 0, MAP_SIZE, MAP_SIZE), 2)
+    
+    screen.blit(minimap_surface, (MAP_X, MAP_Y))
+    
 if __name__ == "__main__":
     main()
